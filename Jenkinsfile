@@ -23,8 +23,15 @@ pipeline {
                 ]) {
                     sshagent([SSH_CREDENTIALS]) {
                         sh '''
+                            # Create deployment directories
+                            ssh -o StrictHostKeyChecking=no ec2-user@${HMS_DEV_EC2_INSTANCE} "
+                                mkdir -p ~/openmrs-deployment/config/nginx
+                            "
+                            
                             # Copy deployment files
                             scp -o StrictHostKeyChecking=no docker/docker-compose.yml ec2-user@${HMS_DEV_EC2_INSTANCE}:~/openmrs-deployment/
+                            scp -o StrictHostKeyChecking=no config/nginx/frontend.conf ec2-user@${HMS_DEV_EC2_INSTANCE}:~/openmrs-deployment/config/nginx/
+                            scp -o StrictHostKeyChecking=no config/nginx/gateway.conf ec2-user@${HMS_DEV_EC2_INSTANCE}:~/openmrs-deployment/config/nginx/
                             
                             # Deploy with credentials and enhanced error handling
                             ssh -o StrictHostKeyChecking=no ec2-user@${HMS_DEV_EC2_INSTANCE} "
