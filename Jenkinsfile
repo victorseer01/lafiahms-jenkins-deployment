@@ -18,7 +18,7 @@ pipeline {
     }
     
     stages {
-        stage('Deploy to EC2') {
+       stage('Deploy to EC2') {
             steps {
                 withCredentials([
                     usernamePassword(credentialsId: 'hms-dev-db-credentials', usernameVariable: 'HMS_DEV_DB_USER', passwordVariable: 'HMS_DEV_DB_PASSWORD'),
@@ -37,29 +37,20 @@ pipeline {
                             scp -o StrictHostKeyChecking=no docker/docker-compose.yml ec2-user@${HMS_DEV_EC2_INSTANCE}:~/openmrs-deployment/
                             scp -o StrictHostKeyChecking=no config/nginx/gateway.conf ec2-user@${HMS_DEV_EC2_INSTANCE}:~/openmrs-deployment/config/nginx/
                             
-                            # SSL Certificates Management (check if certificates exist)
+                            # Handle SSL certificates
                             ssh -o StrictHostKeyChecking=no ec2-user@${HMS_DEV_EC2_INSTANCE} "
                                 if [ ! -f ~/openmrs-deployment/config/ssl/cert.pem ] || [ ! -f ~/openmrs-deployment/config/ssl/privkey.pem ]; then
-                                    echo 'SSL certificates not found. Checking Let's Encrypt certificates...'
-                                    
-                                    if [ -f /etc/letsencrypt/live/${HMS_DEV_DOMAIN_NAME}/fullchain.pem ] && [ -f /etc/letsencrypt/live/${HMS_DEV_DOMAIN_NAME}/privkey.pem ]; then
-                                        echo 'Using existing Let's Encrypt certificates'
-                                        sudo cp /etc/letsencrypt/live/${HMS_DEV_DOMAIN_NAME}/fullchain.pem ~/openmrs-deployment/config/ssl/cert.pem
-                                        sudo cp /etc/letsencrypt/live/${HMS_DEV_DOMAIN_NAME}/privkey.pem ~/openmrs-deployment/config/ssl/privkey.pem
-                                        sudo chown ec2-user:ec2-user ~/openmrs-deployment/config/ssl/*.pem
-                                    else
-                                        echo 'Generating self-signed certificates'
-                                        openssl req -x509 -nodes -days 365 -newkey rsa:2048 \\
-                                        -keyout ~/openmrs-deployment/config/ssl/privkey.pem \\
-                                        -out ~/openmrs-deployment/config/ssl/cert.pem \\
-                                        -subj \"/CN=${HMS_DEV_DOMAIN_NAME}\"
-                                    fi
+                                    echo 'SSL certificates not found. Generating self-signed certificates...'
+                                    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+                                        -keyout ~/openmrs-deployment/config/ssl/privkey.pem \
+                                        -out ~/openmrs-deployment/config/ssl/cert.pem \
+                                        -subj '/CN=${HMS_DEV_DOMAIN_NAME}'
                                 else
-                                    echo 'SSL certificates already exist, skipping certificate generation'
+                                    echo 'SSL certificates already exist, skipping generation'
                                 fi
                             "
                             
-                            # Deploy with credentials and enhanced error handling
+                            # Deploy application
                             ssh -o StrictHostKeyChecking=no ec2-user@${HMS_DEV_EC2_INSTANCE} "
                                 set -e
                                 export AWS_ACCESS_KEY_ID='${AWS_ACCESS_KEY}'
