@@ -1,9 +1,5 @@
 pipeline {
     agent any
-
-     triggers {
-        githubPush() 
-    }
     
     environment {
         AWS_REGION = 'eu-west-2'
@@ -16,9 +12,47 @@ pipeline {
         HMS_DEV_DOMAIN_NAME = 'lafiahms.lafialink-dev.com'
         HMS_DEV_SSL_EMAIL = 'services@seerglobalsolutions.com'
     }
+
+    parameters {
+        booleanParam(name: 'SETUP_SSL', defaultValue: false, description: 'Setup Let\'s Encrypt SSL?')
+    }
     
     stages {
-       stage('Deploy to EC2') {
+        stage('Setup SSL') {
+            when {
+                expression { params.SETUP_SSL }
+            }
+            steps {
+                sshagent([SSH_CREDENTIALS]) {
+                    sh '''
+                        ssh -o StrictHostKeyChecking=no ec2-user@${HMS_DEV_EC2_INSTANCE} "
+                            # Stop containers to free port 80
+                            cd ~/openmrs-deployment
+                            docker-compose down || true
+
+                            # Install certbot if not present
+                            if ! command -v certbot &> /dev/null; then
+                                sudo yum install -y certbot
+                            fi
+
+                            # Get certificate
+                            sudo certbot certonly --standalone \
+                                --non-interactive \
+                                --agree-tos \
+                                --email ${HMS_DEV_SSL_EMAIL} \
+                                --domain ${HMS_DEV_DOMAIN_NAME}
+
+                            # Copy certificates
+                            sudo cp /etc/letsencrypt/live/${HMS_DEV_DOMAIN_NAME}/fullchain.pem ~/openmrs-deployment/config/ssl/cert.pem
+                            sudo cp /etc/letsencrypt/live/${HMS_DEV_DOMAIN_NAME}/privkey.pem ~/openmrs-deployment/config/ssl/privkey.pem
+                            sudo chown -R ec2-user:ec2-user ~/openmrs-deployment/config/ssl/
+                        "
+                    '''
+                }
+            }
+        }
+
+        stage('Deploy') {
             steps {
                 withCredentials([
                     usernamePassword(credentialsId: 'hms-dev-db-credentials', usernameVariable: 'HMS_DEV_DB_USER', passwordVariable: 'HMS_DEV_DB_PASSWORD'),
@@ -27,144 +61,60 @@ pipeline {
                 ]) {
                     sshagent([SSH_CREDENTIALS]) {
                         sh '''
-                            # Create deployment directories
+                            # Create directories
                             ssh -o StrictHostKeyChecking=no ec2-user@${HMS_DEV_EC2_INSTANCE} "
                                 mkdir -p ~/openmrs-deployment/config/nginx
                                 mkdir -p ~/openmrs-deployment/config/ssl
                             "
                             
-                            # Copy deployment files
+                            # Copy files
                             scp -o StrictHostKeyChecking=no docker/docker-compose.yml ec2-user@${HMS_DEV_EC2_INSTANCE}:~/openmrs-deployment/
                             scp -o StrictHostKeyChecking=no config/nginx/gateway.conf ec2-user@${HMS_DEV_EC2_INSTANCE}:~/openmrs-deployment/config/nginx/
                             
-                            # Handle SSL certificates
+                            # Self-signed cert fallback
                             ssh -o StrictHostKeyChecking=no ec2-user@${HMS_DEV_EC2_INSTANCE} "
-                                if [ ! -f ~/openmrs-deployment/config/ssl/cert.pem ] || [ ! -f ~/openmrs-deployment/config/ssl/privkey.pem ]; then
-                                    echo 'SSL certificates not found. Generating self-signed certificates...'
+                                cd ~/openmrs-deployment
+                                if [ ! -f config/ssl/cert.pem ]; then
                                     openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-                                        -keyout ~/openmrs-deployment/config/ssl/privkey.pem \
-                                        -out ~/openmrs-deployment/config/ssl/cert.pem \
+                                        -keyout config/ssl/privkey.pem \
+                                        -out config/ssl/cert.pem \
                                         -subj '/CN=${HMS_DEV_DOMAIN_NAME}'
-                                else
-                                    echo 'SSL certificates already exist, skipping generation'
                                 fi
-                            "
-                            
-                            # Deploy application
-                            ssh -o StrictHostKeyChecking=no ec2-user@${HMS_DEV_EC2_INSTANCE} "
-                                set -e
+
+                                # Deploy application
                                 export AWS_ACCESS_KEY_ID='${AWS_ACCESS_KEY}'
                                 export AWS_SECRET_ACCESS_KEY='${AWS_SECRET_KEY}'
                                 export AWS_DEFAULT_REGION='${AWS_REGION}'
-                                export HMS_DEV_DOMAIN_NAME='${HMS_DEV_DOMAIN_NAME}'
-                                export HMS_DEV_SSL_EMAIL='${HMS_DEV_SSL_EMAIL}'
                                 export HMS_DEV_DB_HOST='${HMS_DEV_DB_HOST}'
                                 export HMS_DEV_DB_NAME='${HMS_DEV_DB_NAME}'
                                 export HMS_DEV_DB_USER='${HMS_DEV_DB_USER}'
                                 export HMS_DEV_DB_PASSWORD='${HMS_DEV_DB_PASSWORD}'
                                 
-                                cd ~/openmrs-deployment
-                                
-                                echo 'Logging into ECR...'
                                 aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REPOSITORY}
-                                
-                                echo 'Stopping existing containers...'
-                                docker-compose down --remove-orphans || true
-                                
-                                echo 'Pulling new images...'
                                 docker-compose pull --quiet
-                                
-                                echo 'Starting containers...'
                                 docker-compose up -d
-                                
-                                echo 'Waiting for services to initialize...'
-                                sleep 60
-                                
-                                echo 'Checking container logs...'
-                                docker-compose logs
                             "
                         '''
                     }
                 }
             }
         }
-
-        stage('Health Check') {
-            steps {
-                sshagent([SSH_CREDENTIALS]) {
-                    script {
-                        def maxRetries = 10
-                        def retryInterval = 30
-                        def success = false
-                        
-                        for (int i = 0; i < maxRetries && !success; i++) {
-                            try {
-                                sh """
-                                    ssh -o StrictHostKeyChecking=no ec2-user@${HMS_DEV_EC2_INSTANCE} '
-                                        cd ~/openmrs-deployment
-                                        
-                                        # Check container status
-                                        running_containers=\$(docker-compose ps --services --filter "status=running" | wc -l)
-                                        echo "Running containers: \$running_containers"
-                                        
-                                        if [ \$running_containers -ge 5 ]; then
-                                            echo "All containers are running"
-                                            exit 0
-                                        else
-                                            echo "Not all containers are running"
-                                            docker-compose ps
-                                            docker-compose logs --tail=50
-                                            exit 1
-                                        fi
-                                    '
-                                """
-                                success = true
-                                echo "All services are healthy!"
-                            } catch (Exception e) {
-                                if (i < maxRetries - 1) {
-                                    echo "Attempt ${i + 1} failed, waiting ${retryInterval} seconds before retry..."
-                                    sleep retryInterval
-                                } else {
-                                    error "Health check failed after ${maxRetries} attempts"
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
     }
-    
+
     post {
         success {
-            script {
-                try {
-                    slackSend(
-                        teamDomain: 'lafialinkdevteam',
-                        channel: SLACK_CHANNEL,
-                        tokenCredentialId: 'slack-bot-user-oath-token',
-                        color: 'good',
-                        message: "*Success!* OpenMRS deployment `${env.JOB_NAME} running on ${HMS_DEV_DOMAIN_NAME}` #${env.BUILD_NUMBER}\n*Duration:* ${currentBuild.durationString}"
-                    )
-                } catch (Exception e) {
-                    echo "Failed to send Slack notification: ${e.message}"
-                }
-            }
+            slackSend(
+                channel: SLACK_CHANNEL,
+                color: 'good',
+                message: "*Success!* OpenMRS deployment `${env.JOB_NAME}` #${env.BUILD_NUMBER}\n*Duration:* ${currentBuild.durationString}"
+            )
         }
         failure {
-            script {
-                try {
-                    slackSend(
-                        teamDomain: 'lafialinkdevteam',
-                        channel: SLACK_CHANNEL,
-                        tokenCredentialId: 'slack-bot-user-oath-token',
-                        color: 'danger',
-                        message: "*Failed!* OpenMRS deployment `${env.JOB_NAME}` #${env.BUILD_NUMBER}\n*Duration:* ${currentBuild.durationString}"
-                    )
-                } catch (Exception e) {
-                    echo "Failed to send Slack notification: ${e.message}"
-                }
-            }
+            slackSend(
+                channel: SLACK_CHANNEL,
+                color: 'danger',
+                message: "*Failed!* OpenMRS deployment `${env.JOB_NAME}` #${env.BUILD_NUMBER}\n*Duration:* ${currentBuild.durationString}"
+            )
         }
     }
 }
