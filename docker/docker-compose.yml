@@ -84,11 +84,10 @@ services:
         - LETSENCRYPT_EMAIL=${HMS_DEV_SSL_EMAIL}
         - SPA_PATH=/openmrs/spa
         - API_URL=/openmrs
-        - PUBLIC_URL=/openmrs/spa
         - SPA_CONFIG_URLS=/openmrs/spa/config-core_demo.json
         - SPA_DEFAULT_LOCALE=
       healthcheck:
-        test: wget --no-verbose --tries=1 --spider http://localhost:80/ || exit 0
+        test: wget --no-verbose --tries=1 --spider http://localhost:80/ 
         interval: 30s
         timeout: 10s
         retries: 3
@@ -127,7 +126,7 @@ services:
       - CORS_ALLOW_CREDENTIALS=true
       - CORS_MAX_AGE=3600
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/openmrs || exit 0"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/openmrs"]
       timeout: 10s
       interval: 30s
       retries: 5
