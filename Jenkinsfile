@@ -131,7 +131,7 @@ pipeline {
                         channel: SLACK_CHANNEL,
                         tokenCredentialId: 'slack-bot-user-oath-token',
                         color: 'good',
-                        message: "*Success!* OpenMRS deployment `${env.JOB_NAME}` #${env.BUILD_NUMBER}\n*Duration:* ${currentBuild.durationString}"
+                        message: "*Success!* OpenMRS deployment `${env.JOB_NAME} running on ${HMS_DEV_DOMAIN_NAME}` #${env.BUILD_NUMBER}\n*Duration:* ${currentBuild.durationString}"
                     )
                 } catch (Exception e) {
                     echo "Failed to send Slack notification: ${e.message}"
