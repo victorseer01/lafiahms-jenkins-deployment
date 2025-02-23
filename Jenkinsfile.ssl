@@ -1,0 +1,40 @@
+pipeline {
+    agent any
+    
+    environment {
+        HMS_DEV_EC2_INSTANCE = 'ec2-13-40-17-170.eu-west-2.compute.amazonaws.com'
+        SSH_CREDENTIALS = 'ec2-ssh-key'
+        HMS_DEV_DOMAIN_NAME = 'lafiahms.lafialink-dev.com'
+        HMS_DEV_SSL_EMAIL = 'services@seerglobalsolutions.com'
+    }
+    
+    stages {
+        stage('Setup SSL') {
+            steps {
+                sshagent([SSH_CREDENTIALS]) {
+                    sh '''
+                        # Copy SSL setup script
+                        scp -o StrictHostKeyChecking=no scripts/setup-ssl.sh ec2-user@${HMS_DEV_EC2_INSTANCE}:~/setup-ssl.sh
+                        
+                        # Make script executable and run it
+                        ssh -o StrictHostKeyChecking=no ec2-user@${HMS_DEV_EC2_INSTANCE} "
+                            chmod +x ~/setup-ssl.sh
+                            export DOMAIN='${HMS_DEV_DOMAIN_NAME}'
+                            export EMAIL='${HMS_DEV_SSL_EMAIL}'
+                            sudo ~/setup-ssl.sh
+                        "
+                    '''
+                }
+            }
+        }
+    }
+    
+    post {
+        success {
+            echo 'SSL certificates have been successfully set up!'
+        }
+        failure {
+            echo 'SSL setup failed. Please check the logs.'
+        }
+    }
+}
