@@ -23,13 +23,15 @@ services:
       - SPA_CONFIG_URLS=/openmrs/spa/config-core_demo.json
       - SPA_DEFAULT_LOCALE=""
     healthcheck:
-      test: wget --no-verbose --tries=1 --spider http://localhost/ || exit 0
+      test: wget --no-verbose --tries=1 --spider http://localhost:80/ || exit 0
       interval: 30s
       timeout: 10s
       retries: 3
     restart: unless-stopped
     depends_on:
       - backend
+    expose:
+      - "80"
 
   backend:
     image: 571600871041.dkr.ecr.eu-west-2.amazonaws.com/lafiaopenmrs-core-backend:latest
@@ -57,8 +59,11 @@ services:
       timeout: 10s
       retries: 5
       start_period: 120s
+    expose:
+      - "8080"
     volumes:
       - openmrs-data:/openmrs/data
     restart: unless-stopped
+
 volumes:
   openmrs-data: ~
