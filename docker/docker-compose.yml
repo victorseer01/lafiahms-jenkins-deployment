@@ -2,36 +2,29 @@ services:
   gateway:
     image: thevo/lafia-openmrs-gateway:dev
     platform: linux/amd64
-    restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./config/nginx/gateway.conf:/etc/nginx/conf.d/default.conf
       - ./config/ssl:/etc/nginx/ssl:ro
-    networks:
-      - default
     depends_on:
       - frontend
       - backend
 
   frontend:
-    image: thevo/lafia-openmrs-frontend:dev
+    image: thevo/lafia-openmrs-frontend:alpha-dev
     platform: linux/amd64
-    restart: unless-stopped
     environment:
       - SPA_PATH=/openmrs/spa
       - API_URL=/openmrs
       - PUBLIC_URL=/openmrs/spa
-    networks:
-      - default
     expose:
       - "80"
 
   backend:
     image: 571600871041.dkr.ecr.eu-west-2.amazonaws.com/lafiaopenmrs-core-backend:latest
     platform: linux/amd64
-    restart: unless-stopped
     environment:
       - OMRS_CONFIG_MODULE_WEB_ADMIN=true
       - OMRS_CONFIG_AUTO_UPDATE_DATABASE=true
@@ -40,15 +33,10 @@ services:
       - OMRS_CONFIG_CONNECTION_DATABASE=${HMS_DEV_DB_NAME}
       - OMRS_CONFIG_CONNECTION_USERNAME=${HMS_DEV_DB_USER}
       - OMRS_CONFIG_CONNECTION_PASSWORD=${HMS_DEV_DB_PASSWORD}
-      - OMRS_CONFIG_CONNECTION_PORT=5432
-      - OMRS_DB_DRIVER_CLASS=org.postgresql.Driver
-      - OMRS_CONFIG_CONNECTION_URL=jdbc:postgresql://${HMS_DEV_DB_HOST}:5432/${HMS_DEV_DB_NAME}
       - CORS_ALLOWED_ORIGINS=*
       - CORS_ALLOWED_METHODS=GET,POST,PUT,DELETE,OPTIONS
       - CORS_ALLOWED_HEADERS=Authorization,Content-Type,X-Requested-With,X-XSRF-TOKEN
       - CORS_ALLOW_CREDENTIALS=true
-    networks:
-      - default
     expose:
       - "8080"
     volumes:
