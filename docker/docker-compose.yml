@@ -16,7 +16,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    image: thevo/lafia-openmrs-frontend:dev
+    image: thevo/lafia-openmrs-frontend:alpha-dev
     platform: linux/amd64
     environment:
       - SPA_PATH=/openmrs/spa
@@ -29,7 +29,7 @@ services:
       retries: 3
     restart: unless-stopped
 
-  backend:
+  _backend:
     image: 571600871041.dkr.ecr.eu-west-2.amazonaws.com/lafiaopenmrs-core-backend:latest
     platform: linux/amd64
     environment:
@@ -54,6 +54,35 @@ services:
     volumes:
       - openmrs-data:/openmrs/data
     restart: unless-stopped
-
+ 
+  backend:
+    image: 571600871041.dkr.ecr.eu-west-2.amazonaws.com/lafiaopenmrs-core-backend:latest
+    platform: linux/amd64
+    environment:
+      - OMRS_CONFIG_MODULE_WEB_ADMIN=true
+      - OMRS_CONFIG_AUTO_UPDATE_DATABASE=true
+      - OMRS_CONFIG_CREATE_TABLES=true
+      - OMRS_CONFIG_CONNECTION_SERVER=${HMS_DEV_DB_HOST}
+      - OMRS_CONFIG_CONNECTION_DATABASE=${HMS_DEV_DB_NAME}
+      - OMRS_CONFIG_CONNECTION_USERNAME=${HMS_DEV_DB_USER}
+      - OMRS_CONFIG_CONNECTION_PASSWORD=${HMS_DEV_DB_PASSWORD}
+      - OMRS_CONFIG_CONNECTION_PORT=5432
+      - OMRS_DB_DRIVER_CLASS=org.postgresql.Driver
+      - OMRS_CONFIG_CONNECTION_URL=jdbc:postgresql://${HMS_DEV_DB_HOST}:5432/${HMS_DEV_DB_NAME}
+      - OMRS_HIBERNATE_DIALECT=org.hibernate.dialect.PostgreSQLDialect
+      # CORS Configuration
+      - CORS_ALLOWED_ORIGINS=*
+      - CORS_ALLOWED_METHODS=GET,POST,PUT,DELETE,OPTIONS,HEAD,PATCH
+      - CORS_ALLOWED_HEADERS=Authorization,Content-Type,X-Requested-With,X-XSRF-TOKEN
+      - CORS_ALLOW_CREDENTIALS=true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/openmrs || exit 0"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    volumes:
+      - openmrs-data:/openmrs/data
+    restart: unless-stopped
 volumes:
   openmrs-data: ~
