@@ -9,20 +9,18 @@ if [ -z "${DOMAIN}" ] || [ -z "${EMAIL}" ]; then
     exit 1
 fi
 
-# Stop containers since we're in the correct directory
-echo "Stopping running containers..."
+echo "Backing up existing SSL certificates..."
+if [ -f ~/openmrs-deployment/config/ssl/cert.pem ]; then
+    cp ~/openmrs-deployment/config/ssl/cert.pem ~/openmrs-deployment/config/ssl/cert.pem.backup
+    cp ~/openmrs-deployment/config/ssl/privkey.pem ~/openmrs-deployment/config/ssl/privkey.pem.backup
+fi
+
+echo "Stopping containers..."
 cd ~/openmrs-deployment
 docker-compose down
 
 echo "Waiting for ports to be freed..."
 sleep 10
-
-# Verify port 80 is free
-if netstat -tuln | grep ':80 '; then
-    echo "Warning: Port 80 is still in use. Attempting to stop docker-proxy..."
-    sudo pkill docker-proxy || true
-    sleep 5
-fi
 
 echo "Requesting certificate for domain: ${DOMAIN}"
 
@@ -36,18 +34,20 @@ sudo certbot certonly --standalone \
 
 # Verify certificate
 if [ ! -d "/etc/letsencrypt/live/${DOMAIN}" ]; then
-    echo "Failed to obtain SSL certificates"
+    echo "Failed to obtain SSL certificates. Restoring backup if available..."
+    if [ -f ~/openmrs-deployment/config/ssl/cert.pem.backup ]; then
+        mv ~/openmrs-deployment/config/ssl/cert.pem.backup ~/openmrs-deployment/config/ssl/cert.pem
+        mv ~/openmrs-deployment/config/ssl/privkey.pem.backup ~/openmrs-deployment/config/ssl/privkey.pem
+    fi
     exit 1
 fi
 
-echo "Copying certificates to openmrs-deployment directory"
-
-# Copy certificates
+echo "Copying new certificates..."
 sudo cp "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ~/openmrs-deployment/config/ssl/cert.pem
 sudo cp "/etc/letsencrypt/live/${DOMAIN}/privkey.pem" ~/openmrs-deployment/config/ssl/privkey.pem
 sudo chown -R ec2-user:ec2-user ~/openmrs-deployment/config/ssl/
 
-echo "Restarting containers..."
-docker-compose up -d
+echo "Cleaning up backups..."
+rm -f ~/openmrs-deployment/config/ssl/*.backup
 
-echo "SSL certificate setup complete!"
+echo "SSL certificate setup complete! You can now restart your containers."
