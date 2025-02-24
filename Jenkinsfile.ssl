@@ -16,12 +16,13 @@ pipeline {
                         # Copy SSL setup script
                         scp -o StrictHostKeyChecking=no scripts/setup-ssl.sh ec2-user@${HMS_DEV_EC2_INSTANCE}:~/setup-ssl.sh
                         
-                        # Make script executable and run it
+                        # Run SSL setup
                         ssh -o StrictHostKeyChecking=no ec2-user@${HMS_DEV_EC2_INSTANCE} "
-                            chmod +x ~/setup-ssl.sh
                             export DOMAIN='${HMS_DEV_DOMAIN_NAME}'
                             export EMAIL='${HMS_DEV_SSL_EMAIL}'
-                            sudo ~/setup-ssl.sh
+                            chmod +x ~/setup-ssl.sh
+                            cd ~/openmrs-deployment  # Ensure we're in the right directory
+                            sudo -E ~/setup-ssl.sh   # Use -E to preserve environment variables
                         "
                     '''
                 }
