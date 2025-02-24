@@ -4,7 +4,7 @@ pipeline {
     environment {
         HMS_DEV_EC2_INSTANCE = 'ec2-13-40-17-170.eu-west-2.compute.amazonaws.com'
         SSH_CREDENTIALS = 'ec2-ssh-key'
-        HMS_DEV_DOMAIN_NAME = 'lafiahms.lafialink-dev.com'
+        HMS_DEV_DOMAIN_NAME = 'lafiahms-dev.lafialink-dev.com'
         HMS_DEV_SSL_EMAIL = 'services@seerglobalsolutions.com'
     }
     
