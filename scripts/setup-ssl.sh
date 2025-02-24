@@ -1,34 +1,41 @@
 #!/bin/bash
+set -e
 
-# SSL Setup script
-DOMAIN="lafiahms.lafialink-dev.com"
-EMAIL="services@seerglobalsolutions.com"
+# Validate inputs
+if [ -z "$DOMAIN" ] || [ -z "$EMAIL" ]; then
+    echo "DOMAIN and EMAIL must be set"
+    exit 1
+fi
 
-# Stop any running containers that might use port 80
+# Stop running containers
 cd ~/openmrs-deployment
 docker-compose down || true
 
-# Install certbot if not already installed
+# Install certbot
 if ! command -v certbot &> /dev/null; then
     sudo yum install -y certbot
 fi
 
-# Request certificate
+# Get certificate
 sudo certbot certonly --standalone \
     --non-interactive \
     --agree-tos \
     --email $EMAIL \
     --domain $DOMAIN
 
-# Create directories if they don't exist
-mkdir -p ~/openmrs-deployment/config/ssl
+# Verify certificate
+if [ ! -d "/etc/letsencrypt/live/$DOMAIN" ]; then
+    echo "Failed to obtain SSL certificates"
+    exit 1
+fi
 
-# Copy certificates
+# Setup directories and copy certificates
+mkdir -p ~/openmrs-deployment/config/ssl
 sudo cp /etc/letsencrypt/live/$DOMAIN/fullchain.pem ~/openmrs-deployment/config/ssl/cert.pem
 sudo cp /etc/letsencrypt/live/$DOMAIN/privkey.pem ~/openmrs-deployment/config/ssl/privkey.pem
 sudo chown -R ec2-user:ec2-user ~/openmrs-deployment/config/ssl/
 
-# Set up auto-renewal with correct paths
+# Setup auto-renewal
 echo "0 0,12 * * * root certbot renew --quiet --post-hook 'cp /etc/letsencrypt/live/$DOMAIN/fullchain.pem ~/openmrs-deployment/config/ssl/cert.pem && cp /etc/letsencrypt/live/$DOMAIN/privkey.pem ~/openmrs-deployment/config/ssl/privkey.pem && chown -R ec2-user:ec2-user ~/openmrs-deployment/config/ssl/'" | sudo tee -a /etc/crontab > /dev/null
 
-echo "SSL certificate setup complete!"
+echo "SSL certificate setup complete"
