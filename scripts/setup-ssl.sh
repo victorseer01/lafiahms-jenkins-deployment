@@ -9,18 +9,16 @@ if [ -z "${DOMAIN}" ] || [ -z "${EMAIL}" ]; then
     exit 1
 fi
 
-# Get the actual user's home directory
-USER_HOME=$(eval echo ~${SUDO_USER})
+# Get the actual user's home directory and create needed directories
+USER_HOME=/home/ec2-user
+mkdir -p ${USER_HOME}/openmrs-deployment/config/ssl
 
-echo "Backing up existing SSL certificates..."
-if [ -f ${USER_HOME}/openmrs-deployment/config/ssl/cert.pem ]; then
-    cp ${USER_HOME}/openmrs-deployment/config/ssl/cert.pem ${USER_HOME}/openmrs-deployment/config/ssl/cert.pem.backup
-    cp ${USER_HOME}/openmrs-deployment/config/ssl/privkey.pem ${USER_HOME}/openmrs-deployment/config/ssl/privkey.pem.backup
-fi
-
-echo "Stopping containers..."
-# Run docker-compose as the original user
-sudo -u ${SUDO_USER} docker compose -f ${USER_HOME}/openmrs-deployment/docker-compose.yml down
+echo "Stopping any running containers..."
+# Use docker directly instead of docker-compose
+docker ps -q | while read container_id; do
+    echo "Stopping container: $container_id"
+    docker stop $container_id
+done
 
 echo "Waiting for ports to be freed..."
 sleep 10
@@ -37,20 +35,13 @@ certbot certonly --standalone \
 
 # Verify certificate
 if [ ! -d "/etc/letsencrypt/live/${DOMAIN}" ]; then
-    echo "Failed to obtain SSL certificates. Restoring backup if available..."
-    if [ -f ${USER_HOME}/openmrs-deployment/config/ssl/cert.pem.backup ]; then
-        mv ${USER_HOME}/openmrs-deployment/config/ssl/cert.pem.backup ${USER_HOME}/openmrs-deployment/config/ssl/cert.pem
-        mv ${USER_HOME}/openmrs-deployment/config/ssl/privkey.pem.backup ${USER_HOME}/openmrs-deployment/config/ssl/privkey.pem
-    fi
+    echo "Failed to obtain SSL certificates."
     exit 1
 fi
 
 echo "Copying new certificates..."
 cp "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ${USER_HOME}/openmrs-deployment/config/ssl/cert.pem
 cp "/etc/letsencrypt/live/${DOMAIN}/privkey.pem" ${USER_HOME}/openmrs-deployment/config/ssl/privkey.pem
-chown -R ${SUDO_USER}:${SUDO_USER} ${USER_HOME}/openmrs-deployment/config/ssl/
+chown -R ec2-user:ec2-user ${USER_HOME}/openmrs-deployment/config/ssl/
 
-echo "Cleaning up backups..."
-rm -f ${USER_HOME}/openmrs-deployment/config/ssl/*.backup
-
-echo "SSL certificate setup complete! You can now restart your containers."
+echo "SSL certificate setup complete!"
