@@ -1,10 +1,6 @@
 #!/bin/bash
 
-# SSL Setup script
-DOMAIN="lafiahms.lafialink-dev.com"
-EMAIL="services@seerglobalsolutions.com"
-
-# Stop any running containers that might use port 80
+# Stop any running containers
 cd ~/openmrs-deployment
 docker-compose down || true
 
@@ -20,7 +16,7 @@ sudo certbot certonly --standalone \
     --email $EMAIL \
     --domain $DOMAIN
 
-# Create directories if they don't exist
+# Create SSL directory
 mkdir -p ~/openmrs-deployment/config/ssl
 
 # Copy certificates
@@ -28,7 +24,7 @@ sudo cp /etc/letsencrypt/live/$DOMAIN/fullchain.pem ~/openmrs-deployment/config/
 sudo cp /etc/letsencrypt/live/$DOMAIN/privkey.pem ~/openmrs-deployment/config/ssl/privkey.pem
 sudo chown -R ec2-user:ec2-user ~/openmrs-deployment/config/ssl/
 
-# Set up auto-renewal with correct paths
+# Set up auto-renewal
 echo "0 0,12 * * * root certbot renew --quiet --post-hook 'cp /etc/letsencrypt/live/$DOMAIN/fullchain.pem ~/openmrs-deployment/config/ssl/cert.pem && cp /etc/letsencrypt/live/$DOMAIN/privkey.pem ~/openmrs-deployment/config/ssl/privkey.pem && chown -R ec2-user:ec2-user ~/openmrs-deployment/config/ssl/'" | sudo tee -a /etc/crontab > /dev/null
 
 echo "SSL certificate setup complete!"

@@ -19,8 +19,11 @@ services:
       - SPA_PATH=/openmrs/spa
       - API_URL=/openmrs
       - PUBLIC_URL=/openmrs/spa
-    expose:
-      - "80"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/ || exit 0"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   backend:
     image: 571600871041.dkr.ecr.eu-west-2.amazonaws.com/lafiaopenmrs-core-backend:latest
@@ -33,12 +36,12 @@ services:
       - OMRS_CONFIG_CONNECTION_DATABASE=${HMS_DEV_DB_NAME}
       - OMRS_CONFIG_CONNECTION_USERNAME=${HMS_DEV_DB_USER}
       - OMRS_CONFIG_CONNECTION_PASSWORD=${HMS_DEV_DB_PASSWORD}
-      - CORS_ALLOWED_ORIGINS=*
-      - CORS_ALLOWED_METHODS=GET,POST,PUT,DELETE,OPTIONS
-      - CORS_ALLOWED_HEADERS=Authorization,Content-Type,X-Requested-With,X-XSRF-TOKEN
-      - CORS_ALLOW_CREDENTIALS=true
-    expose:
-      - "8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/openmrs || exit 0"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     volumes:
       - openmrs-data:/openmrs/data
 
