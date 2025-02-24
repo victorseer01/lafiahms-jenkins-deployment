@@ -15,9 +15,13 @@ fi
 # Create required directories
 mkdir -p ~/openmrs-deployment/config/ssl
 
-# Stop running containers
-cd ~/openmrs-deployment
-docker-compose down || true
+# Stop ALL running containers that might use port 80
+echo "Stopping running containers..."
+cd ~/openmrs-deployment && docker-compose down
+docker ps | grep -q nginx && docker stop $(docker ps -q)
+
+echo "Waiting for ports to be freed..."
+sleep 10
 
 # Install certbot if not already installed
 if ! command -v certbot &> /dev/null; then
@@ -46,16 +50,8 @@ sudo cp "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ~/openmrs-deployment/con
 sudo cp "/etc/letsencrypt/live/${DOMAIN}/privkey.pem" ~/openmrs-deployment/config/ssl/privkey.pem
 sudo chown -R ec2-user:ec2-user ~/openmrs-deployment/config/ssl/
 
-# Setup auto-renewal
-RENEWAL_SCRIPT="
-#!/bin/bash
-certbot renew --quiet
-cp /etc/letsencrypt/live/${DOMAIN}/fullchain.pem ~/openmrs-deployment/config/ssl/cert.pem
-cp /etc/letsencrypt/live/${DOMAIN}/privkey.pem ~/openmrs-deployment/config/ssl/privkey.pem
-chown -R ec2-user:ec2-user ~/openmrs-deployment/config/ssl/
-"
-
-echo "$RENEWAL_SCRIPT" | sudo tee /etc/cron.monthly/ssl-renewal > /dev/null
-sudo chmod +x /etc/cron.monthly/ssl-renewal
+# Restart the containers
+echo "Restarting containers..."
+cd ~/openmrs-deployment && docker-compose up -d
 
 echo "SSL certificate setup complete!"
