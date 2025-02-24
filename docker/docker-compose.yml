@@ -46,11 +46,15 @@ services:
       - OMRS_DB_DRIVER_CLASS=org.postgresql.Driver
       - OMRS_CONFIG_CONNECTION_URL=jdbc:postgresql://${HMS_DEV_DB_HOST}:5432/${HMS_DEV_DB_NAME}
       - OMRS_HIBERNATE_DIALECT=org.hibernate.dialect.PostgreSQLDialect
+      - OMRS_CONFIG_ENFORCE_TENANT_ISOLATION=true
+      - OMRS_CONFIG_TENANT_SCHEMA_VALIDATION=true
       # CORS Configuration
       - CORS_ALLOWED_ORIGINS=*
       - CORS_ALLOWED_METHODS=GET,POST,PUT,DELETE,OPTIONS,HEAD,PATCH
       - CORS_ALLOWED_HEADERS=Authorization,Content-Type,X-Requested-With,X-XSRF-TOKEN
       - CORS_ALLOW_CREDENTIALS=true
+      
+
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/openmrs || exit 0"]
       interval: 30s
