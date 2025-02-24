@@ -6,26 +6,22 @@ echo "Starting SSL setup with DOMAIN=${DOMAIN} and EMAIL=${EMAIL}"
 # Validate inputs
 if [ -z "${DOMAIN}" ] || [ -z "${EMAIL}" ]; then
     echo "Error: DOMAIN and EMAIL environment variables must be set"
-    echo "Current values:"
-    echo "DOMAIN: ${DOMAIN}"
-    echo "EMAIL: ${EMAIL}"
     exit 1
 fi
 
-# Create required directories
-mkdir -p ~/openmrs-deployment/config/ssl
-
-# Stop ALL running containers that might use port 80
+# Stop containers since we're in the correct directory
 echo "Stopping running containers..."
-cd ~/openmrs-deployment && docker-compose down
-docker ps | grep -q nginx && docker stop $(docker ps -q)
+cd ~/openmrs-deployment
+docker-compose down
 
 echo "Waiting for ports to be freed..."
 sleep 10
 
-# Install certbot if not already installed
-if ! command -v certbot &> /dev/null; then
-    sudo yum install -y certbot
+# Verify port 80 is free
+if netstat -tuln | grep ':80 '; then
+    echo "Warning: Port 80 is still in use. Attempting to stop docker-proxy..."
+    sudo pkill docker-proxy || true
+    sleep 5
 fi
 
 echo "Requesting certificate for domain: ${DOMAIN}"
@@ -35,7 +31,8 @@ sudo certbot certonly --standalone \
     --non-interactive \
     --agree-tos \
     --email "${EMAIL}" \
-    --domain "${DOMAIN}"
+    --domain "${DOMAIN}" \
+    --force-renewal
 
 # Verify certificate
 if [ ! -d "/etc/letsencrypt/live/${DOMAIN}" ]; then
@@ -50,8 +47,7 @@ sudo cp "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ~/openmrs-deployment/con
 sudo cp "/etc/letsencrypt/live/${DOMAIN}/privkey.pem" ~/openmrs-deployment/config/ssl/privkey.pem
 sudo chown -R ec2-user:ec2-user ~/openmrs-deployment/config/ssl/
 
-# Restart the containers
 echo "Restarting containers..."
-cd ~/openmrs-deployment && docker-compose up -d
+docker-compose up -d
 
 echo "SSL certificate setup complete!"
